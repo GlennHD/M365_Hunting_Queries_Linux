@@ -1,0 +1,51 @@
+id: 20e61924-8c0e-11ed-a1eb-0242ac120002
+name: Disabling SELinux
+author: Glenn Brown
+description: |
+  Adversaries may disable security tools to avoid potential detection of their tools and activities. 
+  This can take the form of disabling security software, modifying SELinux configuration, or other 
+  methods to interfere with security tools scanning or reporting information. 
+  This is typically done by abusing device administrator permissions or using system exploits to 
+  gain root access to the device to modify protected system files.
+requiredDataConnectors:
+- connectorId: MicrosoftThreatProtection
+  dataTypes:
+  - DeviceInfo
+  - DeviceProcessEvents
+tactics:
+- Defense Evasion
+mitre_att:
+- TA0030
+- T1629
+- T1629.003
+query: |
+  DeviceInfo
+  | where Timestamp > ago(1d)
+  | where OSPlatform == "Linux"
+  | project DeviceId
+  | join 
+      (
+      DeviceProcessEvents
+      | where ActionType == "ProcessCreated"
+      | where ProcessCommandLine has_cs "setenforce 0"
+          or ProcessCommandLine has "setenforce permissive"
+          or (ProcessCommandLine has_cs "selinux/enforce" and ProcessCommandLine has_cs "0")
+          or (ProcessCommandLine has "grub.conf" and (ProcessCommandLine has_cs "selinux=0" or ProcessCommandLine has "enforcing=0"))
+      )
+      on DeviceId
+    | summarize AttemptCount=count()
+        by
+        bin(ProcessCreationTime, 1h),
+        DeviceName,
+        DeviceId,
+        InitiatingProcessAccountName,
+        FolderPath,
+        ProcessCommandLine
+    | project
+        ProcessCreationTime,
+        DeviceName,
+        DeviceId,
+        InitiatingProcessAccountName,
+        FolderPath,
+        ProcessCommandLine,
+        AttemptCount
